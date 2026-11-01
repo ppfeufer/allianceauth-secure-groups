@@ -23,6 +23,16 @@ from .tasks import run_smart_group_update
 logger = get_extension_logger(__name__)
 
 
+
+def _log_request(group, requestor, actor, request_type, action):
+    RequestLog.objects.create(
+        request_type=request_type,
+        requestor=requestor,
+        group=group,
+        action=action,
+        request_actor=actor,
+    )
+
 @permission_required("securegroups.access_sec_group")
 def groups_view(request):
     logger.debug("groups_view called by user %s" % request.user)
@@ -240,10 +250,8 @@ def group_request_add(request, group_id):
         logger.info("%s joining %s as is an open group" %
                     (request.user, group))
         request.user.groups.add(group)
-        request_info = request.user.username + ":" + group.name
-        log = RequestLog(request_type=False, group=group,
-                         request_info=request_info, action=1, request_actor=request.user)
-        log.save()
+        _log_request(group, request.user, request.user,
+                     RequestLog.Type.JOIN, RequestLog.Action.ACCEPT)
         return redirect("securegroups:groups")
     req = GroupRequest.objects.filter(user=request.user, group=group).count()
     if req > 0:
@@ -296,6 +304,8 @@ def group_request_leave(request, group_id):
         logger.info("%s leaving %s as is an open group" %
                     (request.user, group))
         request.user.groups.remove(group)
+        _log_request(group, request.user, request.user,
+                     RequestLog.Type.LEAVE, RequestLog.Action.ACCEPT)
         return redirect("securegroups:groups")
     req = GroupRequest.objects.filter(user=request.user, group=group).count()
     if req > 0:
@@ -313,10 +323,8 @@ def group_request_leave(request, group_id):
             "%s leaving joinable group %s due to auto_leave" % (
                 request.user, group)
         )
-        request_info = request.user.username + ":" + group.name
-        log = RequestLog(request_type=True, group=group,
-                         request_info=request_info, action=1, request_actor=request.user)
-        log.save()
+        _log_request(group, request.user, request.user,
+                     RequestLog.Type.LEAVE, RequestLog.Action.ACCEPT)
         request.user.groups.remove(group)
         return redirect("securegroups:groups")
     grouprequest = GroupRequest()
@@ -351,10 +359,8 @@ def group_membership_remove(request, group_id, user_id):
 
         try:
             user = group.user_set.get(id=user_id)
-            request_info = user.username + ":" + group.name
-            log = RequestLog(request_type=None, group=group,
-                             request_info=request_info, action=1, request_actor=request.user)
-            log.save()
+            _log_request(group, user, request.user,
+                         RequestLog.Type.REMOVE, RequestLog.Action.REMOVE)
             # Remove group from user
             user.groups.remove(group)
             logger.info("User %s removed user %s from group %s" %
